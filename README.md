@@ -1,38 +1,38 @@
-# One-Time Token Service — Starter Scaffold
+# One-Time Token Service
 
-Build a single-use, expiring token service backed by Redis. You implement two
-functions and a test that proves a token can be used **at most once**, even when
-five consumers hit it at the same instant.
+A single-use token service backed by Redis. It stores JSON payloads for a limited
+time and lets exactly one concurrent consumer retrieve each token.
 
-This scaffold gives you the plumbing (dependencies, `.env`, file shapes). Your
-job is the two functions and the concurrency test — see the `TODO`s in the code.
+`issueToken(payload, ttlSeconds)` generates a cryptographically random token ID
+and stores the serialized payload with an expiration using one atomic Redis
+`SET ... EX ... NX` command. `consumeToken(tokenId)` uses Redis `GETDEL` to read
+and delete the value atomically. Separate `GET` and `DEL` commands are unsafe:
+two concurrent consumers could both read the value before either deletes it.
 
-## Setup
+## Setup and Test
+
+Install dependencies, configure Redis, and run the concurrency test:
 
 ```bash
 npm install
-cp .env.example .env      # then set REDIS_URL (local Docker Redis from LU 4.0.1)
-docker start redis-m4     # make sure your Redis is running
-```
-
-## What to implement
-
-- **`token-service.js`**
-  - `issueToken(payload, ttlSeconds)` — random id + JSON payload + atomic `SET ... EX`.
-  - `consumeToken(tokenId)` — atomic `GETDEL`; return `{ ok, payload }` / `{ ok: false, reason }`.
-- **`test.js`**
-  - Issue one token, fire **5 `consumeToken` calls at once** with `Promise.all`,
-    assert **exactly one** succeeds.
-
-## Run the test
-
-```bash
+cp .env.example .env
+docker start redis-m4
 npm test
 ```
 
-You should see `winners: 1` and `PASS: token was single-use.`
+Set `REDIS_URL` in `.env` to your Redis connection URL. For a local Redis
+container if `redis-m4` does not already exist:
 
-## Submit
+```bash
+docker run -d --name redis-m4 -p 6379:6379 redis:7-alpine
+```
 
-Open a Pull Request containing your `token-service.js`, `test.js`, and paste the
-test output (showing `winners: 1`) in the PR description. Submit the PR link.
+The test issues `{ userId: 42 }`, then sends five concurrent consumption
+requests for that token and asserts that exactly one succeeds.
+
+Observed test result:
+
+```text
+winners: 1
+PASS: token was single-use.
+```
